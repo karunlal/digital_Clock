@@ -16,7 +16,7 @@
 const unsigned long chimeDelay = 400;
 const unsigned long halfHourChimeDelay = 300;
 
-const int NORMAL_BRIGHTNESS = 5;
+const int NORMAL_BRIGHTNESS = 2;
 const int CHIME_BRIGHTNESS = 15;
 const int fadeDelay = 50;
 
@@ -41,6 +41,7 @@ bool isChiming = false;
 
 const char* DaysWeek[] = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
 
+// Buzzer functions using digitalWrite (works with passive buzzer)
 void buzzOn() {
   digitalWrite(BUZZER_PIN, LOW);
 }
@@ -50,37 +51,40 @@ void buzzOff() {
 }
 
 void buzz(int duration) {
-  buzzOn();
-  delay(duration);
-  buzzOff();
+  if (duration > 0) {
+    buzzOn();
+    delay(duration);
+    buzzOff();
+  }
 }
 
-void buzzDelay(int duration) {
+void buzzPause(int duration) {
   buzzOff();
   if (duration > 0) delay(duration);
 }
 
 void windChime() {
-  buzz(150);  buzzDelay(150);
-  buzz(100);  buzzDelay(200);
-  buzz(200);  buzzDelay(100);
-  buzz(100);  buzzDelay(300);
-  buzz(300);  buzzDelay(200);
-  buzz(150);  buzzDelay(100);
-  buzz(250);  buzzDelay(100);
+  buzz(150); buzzPause(150);
+  buzz(100); buzzPause(200);
+  buzz(200); buzzPause(100);
+  buzz(100); buzzPause(300);
+  buzz(300); buzzPause(200);
+  buzz(150); buzzPause(100);
+  buzz(250); buzzPause(100);
   buzzOff();
 }
 
 void halfHourChime() {
-  buzz(200);  buzzDelay(100);
-  buzz(300);  buzzDelay(100);
-  buzz(200);  buzzDelay(100);
-  buzz(400);  buzzDelay(100);
+  buzz(200); buzzPause(100);
+  buzz(300); buzzPause(100);
+  buzz(200); buzzPause(100);
+  buzz(400); buzzPause(100);
   buzzOff();
 }
 
 void fadeBrightness(uint8_t targetBrightness) {
   if (targetBrightness == currentBrightness) return;
+
   int step = (targetBrightness > currentBrightness) ? 1 : -1;
   for (int b = currentBrightness; b != targetBrightness; b += step) {
     Display.setIntensity(b);
@@ -99,7 +103,9 @@ void playHourlyChime(int hour24) {
 
   for (int i = 0; i < chimeCount; i++) {
     windChime();
-    if (i < chimeCount - 1) delay(chimeDelay);
+    if (i < chimeCount - 1) {
+      delay(chimeDelay);
+    }
   }
 
   buzzOff();
@@ -124,16 +130,19 @@ void handleTimeBasedChimes() {
     lastHour = currentHour;
     lastMinute = currentMinute;
     playHourlyChime(currentHour);
-  } else if (currentMinute == 30 && lastMinute != 30) {
+  }
+  else if (currentMinute == 30 && lastMinute != 30) {
     lastMinute = currentMinute;
     playHalfHourChime();
-  } else if (currentMinute != lastMinute) {
+  }
+  else if (currentMinute != lastMinute) {
     lastMinute = currentMinute;
   }
 }
 
 void setup() {
   Serial.begin(115200);
+
   pinMode(BUZZER_PIN, OUTPUT);
   buzzOff();
 
@@ -159,6 +168,7 @@ void loop() {
   timeClient.update();
   unsigned long unix_epoch = timeClient.getEpochTime();
   int Day = timeClient.getDay();
+
   second_ = second(unix_epoch);
 
   if (last_second != second_) {
@@ -168,22 +178,21 @@ void loop() {
     month_ = month(unix_epoch);
     year_ = year(unix_epoch);
 
-    if (!isChiming) handleTimeBasedChimes();
+    if (!isChiming) {
+      handleTimeBasedChimes();
+    }
 
     Seconds[1] = second_ % 10 + '0';
     Seconds[0] = second_ / 10 + '0';
+    
     Time[4] = minute_ % 10 + '0';
     Time[3] = minute_ / 10 + '0';
 
-    int hour12 = hour_ % 12;
-    if (hour12 == 0) hour12 = 12;
-    if (hour12 >= 10) {
-      Time[0] = hour12 / 10 + '0';
-      Time[1] = hour12 % 10 + '0';
-    } else {
-      Time[0] = ' ';
-      Time[1] = hour12 + '0';
-    }
+    int displayHour = hour_ % 12;
+    if (displayHour == 0) displayHour = 12;
+
+    Time[1] = displayHour % 10 + '0';
+    Time[0] = (displayHour >= 10) ? (displayHour / 10 + '0') : ' ';
 
     Date[0] = day_ / 10 + '0';
     Date[1] = day_ % 10 + '0';
@@ -193,7 +202,7 @@ void loop() {
     Date[9] = year_ % 10 + '0';
 
     if (!isChiming) {
-      if (second_ < 2) {
+      if (second_ < 3) {
         Display.displayZoneText(0, DaysWeek[Day], PA_LEFT, Display.getSpeed(), Display.getPause(), PA_NO_EFFECT);
         Display.displayZoneText(1, Date, PA_LEFT, Display.getSpeed(), Display.getPause(), PA_NO_EFFECT);
       } else {
@@ -206,6 +215,9 @@ void loop() {
     last_second = second_;
   }
 
-  if (!isChiming) buzzOff();
+  if (!isChiming) {
+    buzzOff();
+  }
+
   delay(500);
 }
